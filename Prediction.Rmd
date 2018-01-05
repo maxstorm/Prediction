@@ -1,0 +1,141 @@
+---
+title: "Prediction Assignment Writeup"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+##Goal of this project
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+##Loading data
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" , destfile = "pml-traininig.csv")
+training <- read.csv("pml-traininig.csv")
+
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile = "pml-testing.csv")
+testing  <- read.csv("pml-testing.csv")
+```
+
+
+```{r}
+setdiff(colnames(training), colnames(testing))
+setdiff(colnames(testing), colnames(training))
+testing <- testing[, -c(1:7)]
+testing <- testing[, colSums(is.na(testing)) == 0]
+cols <- names(subset(testing, select = -c(problem_id)))
+training <- training[, c(cols, "classe")]
+
+```
+
+Creating test and training sets
+```{r, message=FALSE}
+library(caret)
+library(rpart)
+set.seed(2017)
+
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+training_set <- training[inTrain,]
+test_set <- training[-inTrain,]
+```
+
+
+##Modelling
+###KNN Model
+```{r}
+set.seed(2017)
+knn_model <- train(classe ~ ., data = training_set, method = "knn", trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3), preProcess = c("center", "scale"), tuneLength = 10)
+plot(knn_model)
+```
+
+
+###Decision Tree Model
+```{r}
+set.seed(2017)
+dt_model <- rpart(classe ~ ., data=training_set, method="class")
+library(rpart.plot) 
+rpart.plot(dt_model)
+```
+
+###Random Forest Model
+```{r}
+library(randomForest)
+set.seed(2017)
+rf_model <- randomForest(classe ~ ., data = training_set, method = "rf", importance = T, trControl = trainControl(method = "cv", classProbs=TRUE, savePredictions=TRUE, allowParallel=TRUE, number = 10))
+plot(rf_model)
+```
+
+###Boosting Model
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(gbm)
+set.seed(2017)
+b_model <- train(classe ~ ., method = "gbm", data = training_set, verbose = F, trControl = trainControl(method = "cv", number = 10))
+plot(b_model)
+```
+
+##Predicting and comparing models
+
+```{r}
+mod_comp <- data.frame(Modell = c("KNN", "Decision Tree", "Random Forest", "Boosting"), Accuracy = c(0,0,0,0))
+```
+
+
+###KNN Model
+```{r}
+set.seed(2017)
+knn_predict <- predict(knn_model, test_set)
+c <- confusionMatrix(knn_predict, test_set$classe)
+c
+mod_comp[1,2] <- c$overall[1]
+```
+
+
+###Decision Tree Model
+```{r}
+set.seed(2017)
+dt_predict <- predict(dt_model, test_set, type = "class")
+c <- confusionMatrix(dt_predict, test_set$classe)
+c
+mod_comp[2,2] <- c$overall[1]
+```
+
+###Random Forest Model
+```{r}
+set.seed(2017)
+rf_predict <- predict(rf_model, test_set, type = "class")
+c <- confusionMatrix(rf_predict, test_set$classe)
+c
+mod_comp[3,2] <- c$overall[1]
+```
+
+###Boosting Model
+```{r}
+set.seed(2017)
+b_predict <- predict(b_model, test_set)
+c <- confusionMatrix(b_predict, test_set$classe)
+c
+mod_comp[4,2] <- c$overall[1]
+```
+
+##Comparison
+The accuracy of the 4 models is as follows:
+```{r}
+mod_comp
+```
+
+An the winner is the random forest model.
+
+##Predicting the testing data with the chosen model
+```{r}
+prediction <- predict(rf_model, testing)
+prediction
+```
+
